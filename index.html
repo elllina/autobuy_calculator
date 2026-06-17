@@ -825,26 +825,46 @@
     // ── Formula note ──────────────────────────────────────────────
     const impLabel   = importerType === 'legal' ? 'Legal / АКП' : 'Individual / СЦДР';
     const ageBracket = vehicleAge < 3 ? 'New <3y' : vehicleAge < 5 ? '3–5y' : vehicleAge < 7 ? '5–7y' : '7+y';
-    let formulaStr   = `<strong>${impLabel}</strong> &nbsp;·&nbsp; Age: <strong>${ageLabel} (${ageBracket})</strong> &nbsp;·&nbsp; ` +
-                       `FOB = ${fm(fobBase)}` + (useCoef ? ` (${fm(fob)} × 1.2)` : '') + '<br>';
+    const vtypeLabel = document.getElementById('vtype').options[document.getElementById('vtype').selectedIndex].text;
+    const engLabel   = engineType.charAt(0).toUpperCase() + engineType.slice(1);
+    const jeepNote   = highClearance ? ' <em>(JEEP/high-clearance)</em>' : '';
+
+    let formulaStr = `<strong>${impLabel}</strong> &nbsp;·&nbsp; Age: <strong>${ageLabel} (${ageBracket})</strong>` +
+                     ` &nbsp;·&nbsp; ${vtypeLabel} / ${engLabel}${jeepNote}<br>` +
+                     `FOB = ${fm(fobBase)}` + (useCoef ? ` (${fm(fob)} × 1.2)` : '') + '<br>';
 
     const { chosen, legPct, legSpecific, rate, ratePerCC } = dutyResult;
 
-    if (chosen === 'flat') {
-      formulaStr += `Duty = FOB × ${((rate||0)*100).toFixed(1)}% = <strong>${fm(duty)}</strong>`;
-    } else if (chosen === 'exempt') {
-      formulaStr += `Duty = <strong>$0</strong> (electric exempt)`;
+    if (chosen === 'exempt') {
+      formulaStr += `Duty = <strong>$0</strong> (electric — exempt from customs duty)`;
+    } else if (chosen === 'flat') {
+      const pctDisplay = ((rate || 0) * 100).toFixed(1);
+      formulaStr += `Duty = FOB × <strong>${pctDisplay}%</strong> = <strong>${fm(duty)}</strong>`;
     } else if (chosen === 'pct' || chosen === 'specific') {
-      const eurRate = ratePerCC || 0;
-      const legALabel = `FOB × 20% = ${fm(legPct)}`;
-      const legBLabel = `${engineCC}cc × ${eurRate}€ = ${fm(legSpecific)}`;
-      const winner    = chosen === 'pct' ? '→ <strong>A wins</strong>' : '→ <strong>B wins</strong>';
-      formulaStr += `MAX( A: ${legALabel} &nbsp;/&nbsp; B: ${legBLabel} ) ${winner}<br>` +
+      const eurRate  = ratePerCC || 0;
+      const legAStr  = `A: FOB × 20% = <strong>${fm(legPct)}</strong>`;
+      const legBStr  = `B: ${engineCC}cc × ${eurRate}€/cc = <strong>${fm(legSpecific)}</strong>`;
+      const winLabel = chosen === 'pct'
+        ? `→ <strong style="color:var(--accent)">A taken (higher)</strong>`
+        : `→ <strong style="color:var(--accent)">B taken (higher)</strong>`;
+      formulaStr += `MAX( ${legAStr} &nbsp;/&nbsp; ${legBStr} ) ${winLabel}<br>` +
                     `Duty = <strong>${fm(duty)}</strong>`;
     } else if (chosen === 'old') {
-      formulaStr += `Duty = ${engineCC}cc × ${(ratePerCC||0)}€ × EUR/USD = <strong>${fm(duty)}</strong>`;
+      formulaStr += `Duty = ${engineCC}cc × ${ratePerCC || 0}€/cc × EUR→USD = <strong>${fm(duty)}</strong>`;
     }
+
     formulaStr += `<br>VAT = (FOB + Duty) × 20% = (${fm(fobBase)} + ${fm(duty)}) × 20% = <strong>${fm(vat)}</strong>`;
+
+    if (envTax > 0) {
+      formulaStr += `<br>Env. tax = FOB × 2% = <strong>${fm(envTax)}</strong>`;
+    }
+    if (insurance > 0) {
+      formulaStr += `<br>Insurance = FOB × 1% = <strong>${fm(insurance)}</strong>`;
+    }
+    if (stateFee > 0) {
+      formulaStr += `<br>State fee = <strong>${fm(stateFee)}</strong>`;
+    }
+    formulaStr += `<br><strong>Grand total = ${fm(grand)}</strong> &nbsp;(≈ ${Math.round(grand * USD_AMD).toLocaleString()} AMD)`;
 
     document.getElementById('formula-text').innerHTML = formulaStr;
     document.getElementById('formula-note').style.display = 'block';
