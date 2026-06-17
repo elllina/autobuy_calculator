@@ -462,7 +462,7 @@
     <div class="tax-table" id="tax-table">
       <div class="tax-row"><span class="tax-lbl">Customs duty (Таможенный сбор)</span><span class="tax-val accent" id="r-duty">—</span></div>
       <div class="tax-row"><span class="tax-lbl">VAT / НДС (20%)</span><span class="tax-val accent" id="r-vat">—</span></div>
-      <div class="tax-row"><span class="tax-lbl">Excise / env. tax (incl. in duty)</span><span class="tax-val" id="r-excise" style="color:var(--text-sub);font-size:12px;">incl.</span></div>
+      <div class="tax-row"><span class="tax-lbl">Environmental tax (Բնապահπ.)</span><span class="tax-val accent" id="r-excise">—</span></div>
       <div class="tax-row"><span class="tax-lbl">State fee / Налоги</span><span class="tax-val accent" id="r-statefee">—</span></div>
       <div class="tax-row"><span class="tax-lbl">Insurance (Страховка)</span><span class="tax-val accent" id="r-insurance">—</span></div>
       <div class="tax-row total-row"><span class="tax-lbl">Total taxes</span><span class="tax-val" id="r-taxes-total">—</span></div>
@@ -797,13 +797,16 @@
     const vat        = (fobBase + duty) * 0.20;
     const stateFee   = importerType === 'legal' ? getStateFeeUSD() : 0;
     const insurance  = hasInsurance ? fob * 0.01 : 0;
-    const taxesTotal = duty + vat + stateFee + insurance;
+    // Environmental tax: FOB × 2% for gasoline passenger cars
+    const envTax = (engineType === 'gasoline' && document.getElementById('vtype').value !== 'motorcycle')
+      ? fob * 0.02 : 0;
+    const taxesTotal = duty + vat + stateFee + insurance + envTax;
     const grand      = fob + taxesTotal;
 
     // Update right panel
     document.getElementById('r-duty').textContent        = fm(duty);
     document.getElementById('r-vat').textContent         = fm(vat);
-    document.getElementById('r-excise').textContent      = '—';
+    document.getElementById('r-excise').textContent      = envTax > 0 ? fm(envTax) : '$0';
     document.getElementById('r-statefee').textContent    = importerType === 'legal' ? fm(stateFee) : '$0';
     document.getElementById('r-insurance').textContent   = fm(insurance);
     document.getElementById('r-taxes-total').textContent = fm(taxesTotal);
