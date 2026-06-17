@@ -605,14 +605,10 @@
 
   // NEW ≤3y — flat % of FOB
   function gasolineNewRate(cc, highClearance) {
-    if (cc < 1000)  return 0.15;
-    if (cc <= 1500) return 0.15;
-    if (cc <= 1800) return 0.15;
-    if (cc <= 2300) return 0.15;
-    if (cc <= 2800) return 0.15;
-    if (cc <= 3000) return highClearance ? 0.15 : 0.125;
-    if (cc <= 3500) return highClearance ? 0.15 : 0.125;
-    return highClearance ? 0.10 : 0.125;   // >3.5L; >4.2L JEEP → 10%
+    if (cc <= 2800) return 0.15;                           // <1L → 2.3-2.8L all = 15%
+    if (cc <= 3000) return highClearance ? 0.15 : 0.125;   // 2.8-3.0L: JEEP=15%, reg=12.5%
+    if (cc <= 4200) return highClearance ? 0.15 : 0.125;   // 3.0-4.2L: JEEP=15%, reg=12.5%
+    return          highClearance ? 0.10  : 0.125;         // >4.2L:    JEEP=10%, reg=12.5%
   }
 
   // 3-5y and 5-7y — €/cc specific rate (same column both brackets per document)
@@ -644,10 +640,10 @@
   function dieselUsedRatePerCC(cc, bracket) {
     //   <1.5L:   0.32 / 0.32
     //   1.5-2.5: 0.40 / 0.40
-    //   >2.5L:   0.36 / 0.80
+    //   >2.5L:   0.80 / 0.80
     if (cc <= 1500) return 0.32;
     if (cc <= 2500) return 0.40;
-    return bracket === '5-7' ? 0.80 : 0.36;   // >2.5L
+    return 0.80;   // >2.5L (both 3-5y and 5-7y)
   }
 
   // 7+y — €/cc specific rate only (passenger cars)
