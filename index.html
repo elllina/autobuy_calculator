@@ -652,11 +652,12 @@
     return bracket === '5-7' ? 0.86 : 0.36;   // >2.5L
   }
 
-  // 7+y — €/cc specific rate only
+  // 7+y — €/cc specific rate only (passenger cars)
+  // <1.5L → 1.5€,  1.5-2.5L → 2.2€,  >2.5L → 3.2€
   function dieselOldRatePerCC(cc) {
     if (cc <= 1500) return 1.5;
-    if (cc <= 2500) return 2.26;
-    return 3.26;
+    if (cc <= 2500) return 2.2;
+    return 3.2;
   }
 
   // ── MAIN DUTY CALCULATION ─────────────────────────────────────────
@@ -664,9 +665,11 @@
   // legPct      = FOB × 20% in USD  (for used brackets)
   // legSpecific = cc × €/cc in USD  (for used and old brackets)
   // chosen      = 'pct' | 'specific' | 'flat' | 'old'
-  function calcDuty(fobUSD, cc, engineType, importer, vehicleAge, highClearance, coef) {
+  function calcDuty(fobUSD, cc, engineType, importer, vehicleAge, highClearance, coef, vtype) {
     const fob = fobUSD * coef;
     const eur2usd = EUR_TO_USD();
+    // Passenger car types that use the €/cc tariff codes (8703xx)
+    const isPassengerCar = (vtype === 'sedan' || vtype === 'suv' || vtype === 'van');
 
     if (importer === 'individual') {
       return { duty: fob * 0.05, legPct: fob * 0.05, legSpecific: 0, chosen: 'flat', rate: 0.05 };
@@ -702,11 +705,19 @@
     }
 
     if (isOld) {
-      const ratePerCC = engineType === 'diesel'
-        ? dieselOldRatePerCC(cc)
-        : gasolineOldRatePerCC(cc);
-      const duty = ratePerCC * cc * eur2usd;
-      return { duty, legPct: 0, legSpecific: duty, ratePerCC, chosen: 'old' };
+      if (isPassengerCar) {
+        // Passenger car 7+y: ONLY €/cc × cc — no percentage leg
+        const ratePerCC = engineType === 'diesel'
+          ? dieselOldRatePerCC(cc)
+          : gasolineOldRatePerCC(cc);
+        const duty = ratePerCC * cc * eur2usd;
+        return { duty, legPct: 0, legSpecific: duty, ratePerCC, chosen: 'old' };
+      } else {
+        // Truck / motorcycle 7+y — TODO: add separate tariff table
+        // Using flat 10% as placeholder until rates are provided
+        const duty = fob * 0.10;
+        return { duty, legPct: duty, legSpecific: 0, chosen: 'flat', rate: 0.10 };
+      }
     }
 
     return { duty: 0, legPct: 0, legSpecific: 0, chosen: 'none' };
@@ -789,7 +800,8 @@
     const ageLabel   = `${ageYears}y ${remainMonths}m`;
 
     // DUTY — full EAEU formula per age bracket
-    const dutyResult = calcDuty(fob, engineCC, engineType, importerType, vehicleAge, highClearance, coef);
+    const vtype      = document.getElementById('vtype').value;
+    const dutyResult = calcDuty(fob, engineCC, engineType, importerType, vehicleAge, highClearance, coef, vtype);
     const duty    = dutyResult.duty;
     const fobBase = fob * coef;
 
