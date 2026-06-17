@@ -582,30 +582,28 @@
 
   // ══════════════════════════════════════════════════════════════════
   //  ARMENIA CUSTOMS DUTY — LEGAL PERSON (АКП / АКՊ)
-  //  Source: RA / EAEU tariff schedule (document photo provided)
+  //  Source: RA / EAEU tariff schedule (document photo)
   //
-  //  Age is counted from CURRENT year (2026) backward — NOT from document years.
-  //    ≤3 years  = manufactured 2024-2026
-  //    3-5 years = manufactured 2021-2023
-  //    5-7 years = manufactured 2019-2020
-  //    7+ years  = manufactured 2018 and older
+  //  Age counted from CURRENT year dynamically.
+  //    ≤3y  → NEW
+  //    3-5y → USED (combined rate)
+  //    5-7y → USED (combined rate)
+  //    7+y  → OLD (specific rate only)
   //
-  //  FORMULA by age bracket:
-  //    NEW (≤3y):   duty = FOB_USD × rate%          (flat percentage)
-  //    3-5y, 5-7y:  duty = MAX(FOB_EUR × 20%,        (EAEU combined rate)
-  //                             rate_EUR/cc × cc)
-  //    7+ years:    duty = rate_EUR/cc × cc           (specific rate only)
-  //
-  //  FOB_EUR = FOB_USD × (USD_AMD / EUR_AMD)
-  //  duty_USD (for used) = duty_EUR × (EUR_AMD / USD_AMD)
+  //  FORMULA:
+  //    NEW  (≤3y):   duty = FOB × rate%
+  //    3-5y / 5-7y:  duty = MAX(FOB × 20%,  cc × €/cc × EUR→USD)
+  //    7+y:          duty = cc × €/cc × EUR→USD
   //
   //  VAT = (FOB + duty) × 20%
   // ══════════════════════════════════════════════════════════════════
 
   const CURRENT_YEAR = new Date().getFullYear();
+  const EUR_TO_USD   = () => EUR_AMD / USD_AMD;   // live-ish conversion
 
-  // ── GASOLINE ───────────────────────────────────────────────────────
-  // New ≤3y: returns percentage (0.0–1.0) of FOB
+  // ── GASOLINE RATES ────────────────────────────────────────────────
+
+  // NEW ≤3y — flat % of FOB
   function gasolineNewRate(cc, highClearance) {
     if (cc < 1000)  return 0.15;
     if (cc <= 1500) return 0.15;
@@ -614,110 +612,109 @@
     if (cc <= 2800) return 0.15;
     if (cc <= 3000) return highClearance ? 0.15 : 0.125;
     if (cc <= 3500) return highClearance ? 0.15 : 0.125;
-    return highClearance ? 0.10 : 0.125;   // >3.5L / >4.2L JEEP
+    return highClearance ? 0.10 : 0.125;   // >3.5L; >4.2L JEEP → 10%
   }
 
-  // 3-5y and 5-7y: returns EUR/cc specific rate for the MAX formula
-  // Formula: duty_EUR = MAX(fob_eur × 0.20, ratePerCC × cc)
-  function gasolineUsedRatePerCC(cc, ageBracket) {
-    // ageBracket: '3-5' or '5-7'
-    // Rates from document (same values for both 3-5 and 5-7):
-    if (cc < 1000)  return 0.36;
-    if (cc <= 1500) return 0.40;
-    if (cc <= 1800) return 0.36;
-    if (cc <= 2300) return 0.44;
-    if (cc <= 3000) return 0.44;
-    return 0.80;                            // >3.0L
+  // 3-5y and 5-7y — €/cc specific rate (same column both brackets per document)
+  function gasolineUsedRatePerCC(cc) {
+    if (cc <  1000) return 0.36;   // <1L
+    if (cc <= 1500) return 0.40;   // 1-1.5L
+    if (cc <= 1800) return 0.36;   // 1.5-1.8L
+    if (cc <= 2300) return 0.44;   // 1.8-2.3L
+    if (cc <= 3000) return 0.44;   // 2.3-3.0L
+    return 0.80;                   // >3.0L
   }
 
-  // 7+ years: returns EUR/cc specific rate (fixed, no percentage)
+  // 7+y — €/cc specific rate only (no percentage leg)
   function gasolineOldRatePerCC(cc) {
-    if (cc < 1000)  return 1.4;
-    if (cc <= 1500) return 1.5;
-    if (cc <= 1800) return 1.6;
-    if (cc <= 2300) return 2.2;
-    if (cc <= 3000) return 2.2;
-    return 3.2;                             // >3.0L
+    if (cc <  1000) return 1.4;    // <1L
+    if (cc <= 1500) return 1.5;    // 1-1.5L
+    if (cc <= 1800) return 1.6;    // 1.5-1.8L
+    if (cc <= 2300) return 2.2;    // 1.8-2.3L
+    if (cc <= 3000) return 2.2;    // 2.3-3.0L
+    return 3.2;                    // >3.0L
   }
 
-  // ── DIESEL ─────────────────────────────────────────────────────────
-  // New ≤3y: flat % of FOB
-  function dieselNewRate(cc) {
-    // All diesel new = 15% regardless of volume (from document)
-    return 0.15;
+  // ── DIESEL RATES ──────────────────────────────────────────────────
+
+  // NEW ≤3y — flat 15% all volumes
+  function dieselNewRate() { return 0.15; }
+
+  // 3-5y and 5-7y — €/cc specific rate
+  function dieselUsedRatePerCC(cc, bracket) {
+    // bracket: '3-5' or '5-7'
+    // From document: 3-5y / 5-7y columns
+    //   <1.5L:   0.32 / 0.32
+    //   1.5-2.5: 0.40 / 0.40
+    //   2.5-3L:  0.36 / 0.86   (5-7y column is higher for larger diesel)
+    if (cc <= 1500) return 0.32;
+    if (cc <= 2500) return 0.40;
+    return bracket === '5-7' ? 0.86 : 0.36;   // >2.5L
   }
 
-  // 3-5y and 5-7y: EUR/cc specific rate
-  function dieselUsedRatePerCC(cc, ageBracket) {
-    if (cc <= 1500) return ageBracket === '5-7' ? 0.32 : 0.32;
-    if (cc <= 2500) return ageBracket === '5-7' ? 0.40 : 0.40;
-    return ageBracket === '5-7' ? 0.86 : 0.36;   // >2.5L (5-7y = 0.86, 3-5y ≈ 0.36)
-  }
-
-  // 7+ years: EUR/cc specific rate
+  // 7+y — €/cc specific rate only
   function dieselOldRatePerCC(cc) {
     if (cc <= 1500) return 1.5;
     if (cc <= 2500) return 2.26;
     return 3.26;
   }
 
-  // ── MAIN DUTY CALCULATION ───────────────────────────────────────────
-  function calcDutyUSD(fobUSD, cc, engineType, importer, vehicleAge, highClearance, coef) {
+  // ── MAIN DUTY CALCULATION ─────────────────────────────────────────
+  // Returns { duty, legPct, legSpecific, chosen }
+  // legPct      = FOB × 20% in USD  (for used brackets)
+  // legSpecific = cc × €/cc in USD  (for used and old brackets)
+  // chosen      = 'pct' | 'specific' | 'flat' | 'old'
+  function calcDuty(fobUSD, cc, engineType, importer, vehicleAge, highClearance, coef) {
+    const fob = fobUSD * coef;
+    const eur2usd = EUR_TO_USD();
+
     if (importer === 'individual') {
-      // Individual (СЦДР) — simplified flat rate 5%
-      return fobUSD * coef * 0.05;
+      return { duty: fob * 0.05, legPct: fob * 0.05, legSpecific: 0, chosen: 'flat', rate: 0.05 };
     }
-    if (engineType === 'electric') return 0;
+    if (engineType === 'electric') {
+      return { duty: 0, legPct: 0, legSpecific: 0, chosen: 'exempt', rate: 0 };
+    }
 
     const isNew = vehicleAge <= 3;
     const is3_5 = vehicleAge > 3 && vehicleAge <= 5;
     const is5_7 = vehicleAge > 5 && vehicleAge <= 7;
     const isOld = vehicleAge > 7;
 
-    const fobBase = fobUSD * coef;
-
     if (isNew) {
-      const rate = engineType === 'diesel'
-        ? dieselNewRate(cc)
-        : gasolineNewRate(cc, highClearance);
-      return fobBase * rate;
+      const rate = engineType === 'diesel' ? dieselNewRate() : gasolineNewRate(cc, highClearance);
+      const duty = fob * rate;
+      return { duty, legPct: duty, legSpecific: 0, chosen: 'flat', rate };
     }
 
-    // Used vehicles: EAEU combined rate — MAX(% of FOB, specific €/cc)
-    // Convert FOB to EUR for the percentage leg
-    const fobEUR = fobBase * (USD_AMD / EUR_AMD);
-
-    let ratePerCC;
     if (is3_5 || is5_7) {
       const bracket = is3_5 ? '3-5' : '5-7';
-      ratePerCC = engineType === 'diesel'
+      const ratePerCC = engineType === 'diesel'
         ? dieselUsedRatePerCC(cc, bracket)
-        : gasolineUsedRatePerCC(cc, bracket);
+        : gasolineUsedRatePerCC(cc);
 
-      const dutyEUR_pct      = fobEUR * 0.20;
-      const dutyEUR_specific = ratePerCC * cc;
-      const dutyEUR = Math.max(dutyEUR_pct, dutyEUR_specific);
-      return dutyEUR * (EUR_AMD / USD_AMD);
+      const legPct      = fob * 0.20;                    // FOB × 20% in USD
+      const legSpecific = ratePerCC * cc * eur2usd;       // cc × €/cc → USD
+
+      const duty   = Math.max(legPct, legSpecific);
+      const chosen = legPct >= legSpecific ? 'pct' : 'specific';
+      return { duty, legPct, legSpecific, ratePerCC, chosen };
     }
 
     if (isOld) {
-      ratePerCC = engineType === 'diesel'
+      const ratePerCC = engineType === 'diesel'
         ? dieselOldRatePerCC(cc)
         : gasolineOldRatePerCC(cc);
-      const dutyEUR = ratePerCC * cc;
-      return dutyEUR * (EUR_AMD / USD_AMD);
+      const duty = ratePerCC * cc * eur2usd;
+      return { duty, legPct: 0, legSpecific: duty, ratePerCC, chosen: 'old' };
     }
 
-    return 0;
+    return { duty: 0, legPct: 0, legSpecific: 0, chosen: 'none' };
   }
 
   // ══════════════════════════════════════════
-  //  STATE FEE (Պետական տուրք / Налоги)
-  //  Shown as $300 in example — fixed placeholder
+  //  STATE FEE (Налоги / Պետական տուրք) — $300 placeholder
   // ══════════════════════════════════════════
-  function getStateFeeUSD(fob) {
-    return 300;
-  }
+  function getStateFeeUSD() { return 300; }
 
   // ══════════════════════════════════════════
   //  FOB
@@ -776,23 +773,23 @@
     const vehicleAge = CURRENT_YEAR - yr;
 
     // DUTY — full EAEU formula per age bracket
-    const duty = calcDutyUSD(fob, engineCC, engineType, importerType, vehicleAge, highClearance, coef);
+    const dutyResult = calcDuty(fob, engineCC, engineType, importerType, vehicleAge, highClearance, coef);
+    const duty    = dutyResult.duty;
+    const fobBase = fob * coef;
 
     // VAT = (FOB + duty) × 20%
-    const fobBase = fob * coef;
-    const vat     = (fobBase + duty) * 0.20;
-
-    const stateFee  = importerType === 'legal' ? getStateFeeUSD(fob) : 0;
-    const insurance = hasInsurance ? fob * 0.01 : 0;
+    const vat        = (fobBase + duty) * 0.20;
+    const stateFee   = importerType === 'legal' ? getStateFeeUSD() : 0;
+    const insurance  = hasInsurance ? fob * 0.01 : 0;
     const taxesTotal = duty + vat + stateFee + insurance;
     const grand      = fob + taxesTotal;
 
     // Update right panel
-    document.getElementById('r-duty').textContent      = fm(duty);
-    document.getElementById('r-vat').textContent       = fm(vat);
-    document.getElementById('r-excise').textContent    = '—';
-    document.getElementById('r-statefee').textContent  = importerType === 'legal' ? fm(stateFee) : '$0';
-    document.getElementById('r-insurance').textContent = fm(insurance);
+    document.getElementById('r-duty').textContent        = fm(duty);
+    document.getElementById('r-vat').textContent         = fm(vat);
+    document.getElementById('r-excise').textContent      = '—';
+    document.getElementById('r-statefee').textContent    = importerType === 'legal' ? fm(stateFee) : '$0';
+    document.getElementById('r-insurance').textContent   = fm(insurance);
     document.getElementById('r-taxes-total').textContent = fm(taxesTotal);
 
     // Grand total
@@ -800,30 +797,32 @@
     document.getElementById('grand-total-amd').textContent =
       '≈ ' + Math.round(grand * USD_AMD).toLocaleString() + ' AMD';
 
-    // Formula note
-    const note = document.getElementById('formula-note');
+    // ── Formula note ──────────────────────────────────────────────
     const impLabel   = importerType === 'legal' ? 'Legal / АКП' : 'Individual / СЦДР';
-    const ageBracket = vehicleAge <= 3 ? 'New (≤3y)' : vehicleAge <= 5 ? '3–5y' : vehicleAge <= 7 ? '5–7y' : '7+y';
-    const fobBase2   = fob * coef;
-    const fobEUR     = fobBase2 * (USD_AMD / EUR_AMD);
+    const ageBracket = vehicleAge <= 3 ? 'New ≤3y' : vehicleAge <= 5 ? '3–5y' : vehicleAge <= 7 ? '5–7y' : '7+y';
+    let formulaStr   = `<strong>${impLabel}</strong> &nbsp;·&nbsp; <strong>${ageBracket}</strong> &nbsp;·&nbsp; ` +
+                       `FOB = ${fm(fobBase)}` + (useCoef ? ` (${fm(fob)} × 1.2)` : '') + '<br>';
 
-    let formulaStr = `Importer: <strong>${impLabel}</strong> &nbsp;|&nbsp; Age: <strong>${vehicleAge}y (${ageBracket})</strong>`;
-    if (useCoef) formulaStr += ` &nbsp;|&nbsp; Coef: <strong>×1.2</strong>`;
-    formulaStr += `<br>FOB = ${fm(fob)}` + (useCoef ? ` × 1.2 = ${fm(fobBase2)}` : '');
+    const { chosen, legPct, legSpecific, rate, ratePerCC } = dutyResult;
 
-    if (vehicleAge <= 3) {
-      const pct = importerType === 'individual' ? 5 : (engineType === 'diesel' ? 15 : null);
-      const displayPct = pct || 'see table';
-      formulaStr += `<br>Duty = FOB × rate% = <strong>${fm(duty)}</strong>`;
-    } else if (vehicleAge <= 7) {
-      formulaStr += `<br>Duty = MAX(FOB_EUR(${Math.round(fobEUR)}€) × 20%, €/cc × cc) = <strong>${fm(duty)}</strong>`;
-    } else {
-      formulaStr += `<br>Duty = €/cc × cc (fixed specific rate) = <strong>${fm(duty)}</strong>`;
+    if (chosen === 'flat') {
+      formulaStr += `Duty = FOB × ${((rate||0)*100).toFixed(1)}% = <strong>${fm(duty)}</strong>`;
+    } else if (chosen === 'exempt') {
+      formulaStr += `Duty = <strong>$0</strong> (electric exempt)`;
+    } else if (chosen === 'pct' || chosen === 'specific') {
+      const eurRate = ratePerCC || 0;
+      const legALabel = `FOB × 20% = ${fm(legPct)}`;
+      const legBLabel = `${engineCC}cc × ${eurRate}€ = ${fm(legSpecific)}`;
+      const winner    = chosen === 'pct' ? '→ <strong>A wins</strong>' : '→ <strong>B wins</strong>';
+      formulaStr += `MAX( A: ${legALabel} &nbsp;/&nbsp; B: ${legBLabel} ) ${winner}<br>` +
+                    `Duty = <strong>${fm(duty)}</strong>`;
+    } else if (chosen === 'old') {
+      formulaStr += `Duty = ${engineCC}cc × ${(ratePerCC||0)}€ × EUR/USD = <strong>${fm(duty)}</strong>`;
     }
-    formulaStr += `<br>VAT = (FOB + Duty) × 20% = <strong>${fm(vat)}</strong>`;
+    formulaStr += `<br>VAT = (FOB + Duty) × 20% = (${fm(fobBase)} + ${fm(duty)}) × 20% = <strong>${fm(vat)}</strong>`;
 
     document.getElementById('formula-text').innerHTML = formulaStr;
-    note.style.display = 'block';
+    document.getElementById('formula-note').style.display = 'block';
   }
 
   // ══════════════════════════════════════════
