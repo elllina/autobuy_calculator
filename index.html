@@ -642,14 +642,12 @@
 
   // 3-5y and 5-7y — €/cc specific rate
   function dieselUsedRatePerCC(cc, bracket) {
-    // bracket: '3-5' or '5-7'
-    // From document: 3-5y / 5-7y columns
     //   <1.5L:   0.32 / 0.32
     //   1.5-2.5: 0.40 / 0.40
-    //   2.5-3L:  0.36 / 0.86   (5-7y column is higher for larger diesel)
+    //   >2.5L:   0.36 / 0.80
     if (cc <= 1500) return 0.32;
     if (cc <= 2500) return 0.40;
-    return bracket === '5-7' ? 0.86 : 0.36;   // >2.5L
+    return bracket === '5-7' ? 0.80 : 0.36;   // >2.5L
   }
 
   // 7+y — €/cc specific rate only (passenger cars)
