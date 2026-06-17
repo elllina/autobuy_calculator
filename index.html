@@ -675,10 +675,11 @@
       return { duty: 0, legPct: 0, legSpecific: 0, chosen: 'exempt', rate: 0 };
     }
 
-    const isNew = vehicleAge <= 3;
-    const is3_5 = vehicleAge > 3 && vehicleAge <= 5;
-    const is5_7 = vehicleAge > 5 && vehicleAge <= 7;
-    const isOld = vehicleAge > 7;
+    // Strict boundaries: a car that has crossed its 3rd birthday is no longer "new"
+    const isNew = vehicleAge < 3;
+    const is3_5 = vehicleAge >= 3 && vehicleAge < 5;
+    const is5_7 = vehicleAge >= 5 && vehicleAge < 7;
+    const isOld = vehicleAge >= 7;
 
     if (isNew) {
       const rate = engineType === 'diesel' ? dieselNewRate() : gasolineNewRate(cc, highClearance);
@@ -763,14 +764,29 @@
     const engineCC  = parseFloat(document.getElementById('engine-vol').value) || 2000;
     const engineType = document.getElementById('engine-type').value;
     const yr  = parseInt(document.getElementById('year').value)  || 2020;
-    const mo  = document.getElementById('month').value || '01';
-    const dy  = document.getElementById('day').value   || '01';
+    const mo  = parseInt(document.getElementById('month').value) || 1;
+    const dy  = parseInt(document.getElementById('day').value)   || 1;
     const highClearance = document.getElementById('chk-clearance').checked;
     const hasInsurance  = document.getElementById('chk-insurance').checked;
     const useCoef       = document.getElementById('chk-coef').checked;
     const coef          = useCoef ? 1.2 : 1.0;
 
-    const vehicleAge = CURRENT_YEAR - yr;
+    // Exact age from manufacture date to today
+    const today  = new Date();
+    const mfgDate = new Date(yr, mo - 1, dy);
+    // Full years elapsed (accounts for month/day boundary)
+    let ageYears  = today.getFullYear() - mfgDate.getFullYear();
+    const mAfter  = today.getMonth() > mfgDate.getMonth() ||
+                    (today.getMonth() === mfgDate.getMonth() && today.getDate() >= mfgDate.getDate());
+    if (!mAfter) ageYears--;   // birthday hasn't passed yet this year
+
+    // Remaining months after stripping full years
+    let remainMonths = today.getMonth() - mfgDate.getMonth();
+    if (today.getDate() < mfgDate.getDate()) remainMonths--;
+    if (remainMonths < 0) remainMonths += 12;
+
+    const vehicleAge = ageYears; // integer full years, used for bracket logic
+    const ageLabel   = `${ageYears}y ${remainMonths}m`;
 
     // DUTY — full EAEU formula per age bracket
     const dutyResult = calcDuty(fob, engineCC, engineType, importerType, vehicleAge, highClearance, coef);
@@ -799,8 +815,8 @@
 
     // ── Formula note ──────────────────────────────────────────────
     const impLabel   = importerType === 'legal' ? 'Legal / АКП' : 'Individual / СЦДР';
-    const ageBracket = vehicleAge <= 3 ? 'New ≤3y' : vehicleAge <= 5 ? '3–5y' : vehicleAge <= 7 ? '5–7y' : '7+y';
-    let formulaStr   = `<strong>${impLabel}</strong> &nbsp;·&nbsp; <strong>${ageBracket}</strong> &nbsp;·&nbsp; ` +
+    const ageBracket = vehicleAge < 3 ? 'New <3y' : vehicleAge < 5 ? '3–5y' : vehicleAge < 7 ? '5–7y' : '7+y';
+    let formulaStr   = `<strong>${impLabel}</strong> &nbsp;·&nbsp; Age: <strong>${ageLabel} (${ageBracket})</strong> &nbsp;·&nbsp; ` +
                        `FOB = ${fm(fobBase)}` + (useCoef ? ` (${fm(fob)} × 1.2)` : '') + '<br>';
 
     const { chosen, legPct, legSpecific, rate, ratePerCC } = dutyResult;
